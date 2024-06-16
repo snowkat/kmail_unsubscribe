@@ -1,0 +1,8 @@
+{
+    "KPlugin": {
+        "Description": "Adds RFC 8058 One-Click Unsubscribe to KMail.",
+        "EnabledByDefault": true,
+        "Name": "Unsubscribe",
+        "Version": "2.0"
+    }
+}
