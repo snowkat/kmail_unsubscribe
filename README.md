@@ -35,3 +35,7 @@ $ cmake --install build
 ## Usage
 
 Once installed, the Unsubscribe button can be added to the KMail Toolbar by right clicking it and selecting "Configure Toolbars...".
+
+## License
+
+See LICENSE.txt.
