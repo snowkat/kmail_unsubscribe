@@ -137,10 +137,54 @@ void UnsubscribePluginInterface::setMessageItem(const Akonadi::Item &item)
 /// @param item The new item.
 void UnsubscribePluginInterface::updateAction(const Akonadi::Item &item)
 {
-    qCDebug(UnsubscribePlugin) << "updateAction!?" << mActions.count() << "actions";
     mUnsub.setMessageItem(item);
+    auto status = mUnsub.unsubscribeStatus();
+    QAction *action = mActions.first();
+    QString caption;
 
-    mActions.first()->setDisabled(mUnsub.unsubscribeStatus() == UnsubscribeManager::None);
+    switch (mUnsub.unsubscribeStatus())
+    {
+    case UnsubscribeManager::NoOneClick:
+    {
+        QString scheme = mUnsub.getUrl().scheme();
+        if (scheme.startsWith("http"))
+        {
+            caption = i18nc("unsubscribe via the web", "Web");
+        }
+        else if (scheme.startsWith("mailto"))
+        {
+            caption = i18nc("unsubscribe via email", "Email");
+        }
+        else
+        {
+            // Unknown, just set to
+            caption = scheme;
+        }
+    }
+    break;
+    case UnsubscribeManager::ValidOneClick:
+    case UnsubscribeManager::InvalidOneClick:
+        caption = i18nc("using RFC 8058 unsubscribe", "One-Click");
+        break;
+    case UnsubscribeManager::None:
+    default:
+        // Do nothing
+        break;
+    }
+
+    // Assuming we have an action, set the action up
+    if (action)
+    {
+        action->setDisabled(status == UnsubscribeManager::None);
+        if (caption.isEmpty())
+        {
+            action->setIconText(i18n("Unsubscribe"));
+        }
+        else
+        {
+            action->setIconText(i18nc("unsubscribe via %1", "Unsubscribe (%1)", caption));
+        }
+    }
 }
 
 void UnsubscribePluginInterface::getOneClickResult(bool isSuccess, const QString &resultString)
