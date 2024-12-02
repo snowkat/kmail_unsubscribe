@@ -49,11 +49,18 @@ void OneClickUnsubscribeJob::slotSslErrors(QNetworkReply *reply, const QList<QSs
 
 void OneClickUnsubscribeJob::slotFinished(QNetworkReply *reply)
 {
-    qCDebug(UnsubscribePlugin) << "Successful response from" << mUrl << "with result" << reply->errorString();
-    UnsubscribeManager::Result successResult = {
-        .Type = UnsubscribeManager::Result::None,
-    };
-    Q_EMIT result(successResult);
+    if (reply->error() == QNetworkReply::NoError)
+    {
+        qCDebug(UnsubscribePlugin) << "Successful response from" << mUrl << "with result" << reply->errorString();
+        UnsubscribeManager::Result successResult = {
+            .Type = UnsubscribeManager::Result::None,
+        };
+        Q_EMIT result(successResult);
+    }
+    else
+    {
+        qCWarning(UnsubscribePlugin) << "Failed response for" << mUrl << "completed with" << reply->errorString();
+    }
 }
 
 void OneClickUnsubscribeJob::slotError(QNetworkReply::NetworkError error)
