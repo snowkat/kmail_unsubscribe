@@ -3,7 +3,7 @@
 
 #include <QObject>
 #include <Akonadi/Item>
-#include <KMime/KMimeMessage>
+#include <KMime/Message>
 #include <MessageCore/MailingList>
 #include <MessageViewer/DKIMManager>
 
