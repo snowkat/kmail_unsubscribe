@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
 
-project(kmail-unsubscribe VERSION "1.0.0")
+project(kmail-unsubscribe VERSION "1.1.0")
 
 set(KF_MIN_VERSION "6.0.0")
 set(QT_REQUIRED_VERSION "6.6.0")
