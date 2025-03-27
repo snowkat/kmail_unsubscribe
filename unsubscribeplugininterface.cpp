@@ -139,7 +139,7 @@ void UnsubscribePluginInterface::updateAction(const Akonadi::Item &item)
 {
     mUnsub.setMessageItem(item);
     auto status = mUnsub.unsubscribeStatus();
-    QAction *action = mActions.first();
+    QAction *action = (mActions.isEmpty()) ? nullptr : mActions.first();
     QString caption;
 
     switch (mUnsub.unsubscribeStatus())
