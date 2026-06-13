@@ -37,10 +37,10 @@ void UnsubscribeManager::setMessageItem(const Akonadi::Item &item)
         this->reset();
     }
 
-    // First, we have to have a KMime::Message::Ptr
-    if (item.hasPayload<KMime::Message::Ptr>())
+    // First, we have to have a KMime::Message pointer
+    if (item.hasPayload<std::shared_ptr<KMime::Message>>())
     {
-        mMessage = item.payload<KMime::Message::Ptr>();
+        mMessage = item.payload<std::shared_ptr<KMime::Message>>();
         if (mMessage == nullptr)
         {
             // Sometimes we get nullptr even though item.hasPayload() was true...

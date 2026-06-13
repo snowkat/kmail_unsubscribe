@@ -111,7 +111,7 @@ namespace MessageViewer
 
     private:
         // message info
-        KMime::Message::Ptr mMessage = nullptr;
+        std::shared_ptr<KMime::Message> mMessage = nullptr;
         MessageCore::MailingList mList;
         Akonadi::Item::Id mItemId = -1;
 
