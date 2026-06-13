@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
 
 project(kmail-unsubscribe VERSION "1.1.0")
 
-set(KF_MIN_VERSION "6.0.0")
+set(KF_MIN_VERSION "6.22.0")
+set(KPIM_MIN_VERSION "6.7.0")
 set(QT_REQUIRED_VERSION "6.6.0")
 
 # Extra CMake Modules
@@ -19,14 +20,14 @@ find_package(KF6GuiAddons ${KF_MIN_VERSION} CONFIG REQUIRED)
 find_package(KF6XmlGui ${KF_MIN_VERSION} CONFIG REQUIRED)
 find_package(KF6Parts ${KF_MIN_VERSION} CONFIG REQUIRED)
 find_package(KF6KIO ${KF_MIN_VERSION} CONFIG REQUIRED)
-
-
-find_package(KPim6MailCommon ${KF_MIN_VERSION} CONFIG REQUIRED)
-find_package(KPim6MessageCore ${KF_MIN_VERSION} CONFIG REQUIRED)
-find_package(KPim6MessageViewer ${KF_MIN_VERSION} CONFIG REQUIRED)
-find_package(KPim6Libkdepim ${KF_MIN_VERSION} CONFIG REQUIRED)
-find_package(KPim6PimCommonAkonadi ${KF_MIN_VERSION} CONFIG REQUIRED)
 find_package(KF6I18n ${KF_MIN_VERSION} NO_MODULE)
+
+
+find_package(KPim6MailCommon ${KPIM_MIN_VERSION} CONFIG REQUIRED)
+find_package(KPim6MessageCore ${KPIM_MIN_VERSION} CONFIG REQUIRED)
+find_package(KPim6MessageViewer ${KPIM_MIN_VERSION} CONFIG REQUIRED)
+find_package(KPim6Libkdepim ${KPIM_MIN_VERSION} CONFIG REQUIRED)
+find_package(KPim6PimCommonAkonadi ${KPIM_MIN_VERSION} CONFIG REQUIRED)
 ki18n_install(po)
 
 set(kmail_unsubscribe_SRCS
