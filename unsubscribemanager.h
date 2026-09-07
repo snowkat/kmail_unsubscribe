@@ -110,6 +110,9 @@ namespace MessageViewer
         void oneClickResult(bool isSuccess, const QString &resultString);
 
     private:
+        [[nodiscard]] bool hasValidOneClickHeaders() const;
+        [[nodiscard]] bool dkimSignatureCoversOneClickHeaders() const;
+
         // message info
         std::shared_ptr<KMime::Message> mMessage = nullptr;
         MessageCore::MailingList mList;

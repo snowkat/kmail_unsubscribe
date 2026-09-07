@@ -25,6 +25,17 @@ confirmDialog(const QString &text, const QString &question, bool safe)
     return msgBox.exec() == QMessageBox::Yes;
 }
 
+static void
+openUnsubscribeUrl(const QUrl &url, QWidget *parent)
+{
+    if (!url.isEmpty())
+    {
+        auto job = new KIO::OpenUrlJob(url);
+        job->setUiDelegate(KIO::createDefaultJobUiDelegate(KJobUiDelegate::AutoHandlingEnabled, parent));
+        job->start();
+    }
+}
+
 UnsubscribePluginInterface::UnsubscribePluginInterface(QWidget *parent, KActionCollection *ac)
     : ViewerPluginInterface(parent),
       mParent(parent)
@@ -92,13 +103,7 @@ void UnsubscribePluginInterface::execute()
         case UnsubscribeManager::NoOneClick:
         {
             // Load the unsubscribe URL normally
-            QUrl url = mUnsub.getUrl();
-            if (!url.isEmpty())
-            {
-                auto job = new KIO::OpenUrlJob(url);
-                job->setUiDelegate(KIO::createDefaultJobUiDelegate(KJobUiDelegate::AutoHandlingEnabled, mParent));
-                job->start();
-            }
+            openUnsubscribeUrl(mUnsub.getUrl(), mParent);
             break;
         }
         break;
@@ -109,7 +114,10 @@ void UnsubscribePluginInterface::execute()
                     i18n("Do you still want to unsubscribe?"),
                     false))
             {
-                mUnsub.doOneClick();
+                // Do not send a POST for unauthenticated headers. Open the
+                // advertised URL so the user can review it in the normal URL
+                // handler instead.
+                openUnsubscribeUrl(mUnsub.getUrl(), mParent);
             }
             break;
         }
@@ -162,8 +170,8 @@ void UnsubscribePluginInterface::updateAction(const Akonadi::Item &item)
         }
     }
     break;
-    case UnsubscribeManager::ValidOneClick:
     case UnsubscribeManager::InvalidOneClick:
+    case UnsubscribeManager::ValidOneClick:
         caption = i18nc("using RFC 8058 unsubscribe", "One-Click");
         break;
     case UnsubscribeManager::None:

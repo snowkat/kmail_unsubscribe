@@ -4,6 +4,9 @@
 
 #include "unsubscribemanager.h"
 #include "oneclickunsubscribejob.h"
+#include "rfc8058validator.h"
+
+#include <MessageViewer/DKIMInfo>
 
 using namespace MessageViewer;
 
@@ -56,11 +59,14 @@ void UnsubscribeManager::setMessageItem(const Akonadi::Item &item)
         qWarning(UnsubscribePlugin) << "Received email doesn't seem to be an email";
     }
 
-    // Don't bother checking DKIM if we don't have an unsubscribe URL, or if we
-    // don't have DKIM enabled
-    if (!(getUrl().isEmpty()) && MessageViewerSettings::self()->enabledDkim())
+    // RFC 8058 requires a valid DKIM signature covering both unsubscribe
+    // headers. This verification is required even when KMail's DKIM display is
+    // disabled.
+    if (!oneClickUrl().isEmpty() && hasValidOneClickHeaders())
     {
-        mDkimMgr.checkDKim(item);
+        // A stored DKIM result may predate a local message change, so always
+        // verify the message that supplies the one-click URI.
+        mDkimMgr.recheckDKim(item);
     }
 }
 
@@ -73,7 +79,10 @@ void UnsubscribeManager::getDkimResult(const MessageViewer::DKIMCheckSignatureJo
 {
     if (id == mItemId)
     {
-        mDKIMValid = checkResult.isValid();
+        // CheckSignatureResult::isValid() only reports whether a result was
+        // produced; Invalid and EmailNotSigned are also "valid" result objects.
+        mDKIMValid = Rfc8058::isCryptographicallyValid(checkResult.status)
+            && dkimSignatureCoversOneClickHeaders();
         qCDebug(UnsubscribePlugin) << "Got DKIM result! Valid:" << mDKIMValid;
     }
     else
@@ -89,11 +98,9 @@ UnsubscribeManager::unsubscribeStatus()
     {
         if (!oneClickUrl().isEmpty())
         {
-            // One-Click requires List-Unsubscribe-Post
-            if (mMessage->hasHeader(LIST_UNSUBSCRIBE_POST_HDR))
+            if (hasValidOneClickHeaders())
             {
-                if (MessageViewerSettings::self()->enabledDkim() &&
-                    !mDKIMValid)
+                if (!mDKIMValid)
                 {
                     return UnsubscribeManager::InvalidOneClick;
                 }
@@ -110,7 +117,7 @@ UnsubscribeManager::unsubscribeStatus()
 void UnsubscribeManager::doOneClick()
 {
     auto status = unsubscribeStatus();
-    if (status == UnsubscribeManager::InvalidOneClick || status == UnsubscribeManager::ValidOneClick)
+    if (status == UnsubscribeManager::ValidOneClick)
     {
         auto job = new OneClickUnsubscribeJob(mPostUrl, this);
         connect(job, &OneClickUnsubscribeJob::result, this, &UnsubscribeManager::checkResult);
@@ -122,16 +129,7 @@ QUrl UnsubscribeManager::oneClickUrl()
 {
     if (mPostUrl.isEmpty() && mList.features().testFlag(MessageCore::MailingList::Unsubscribe))
     {
-        foreach (QUrl url, mList.unsubscribeUrls())
-        {
-            // Per the RFC, there should only be one HTTPS URL. So grab the
-            // first one we find
-            if (url.scheme() == QStringLiteral("https"))
-            {
-                mPostUrl = url;
-                break;
-            }
-        }
+        mPostUrl = Rfc8058::oneClickPostUrl(mList.unsubscribeUrls());
     }
 
     return mPostUrl;
@@ -163,6 +161,51 @@ QUrl UnsubscribeManager::getUrl()
     }
 
     return QUrl();
+}
+
+bool UnsubscribeManager::hasValidOneClickHeaders() const
+{
+    if (!mMessage)
+    {
+        return false;
+    }
+
+    QStringList headerNames;
+    for (const auto *const header : mMessage->headers())
+    {
+        headerNames.append(QString::fromLatin1(header->type()));
+    }
+    if (!Rfc8058::hasExactlyOneRequiredHeaderPair(headerNames))
+    {
+        return false;
+    }
+
+    const auto *const header = mMessage->headerByType(LIST_UNSUBSCRIBE_POST_HDR);
+    if (!header)
+    {
+        return false;
+    }
+
+    const QString value = header->asUnicodeString();
+    return Rfc8058::isValidPostHeaderValue(value);
+}
+
+bool UnsubscribeManager::dkimSignatureCoversOneClickHeaders() const
+{
+    if (!mMessage)
+    {
+        return false;
+    }
+
+    const auto *const header = mMessage->headerByType("DKIM-Signature");
+    if (!header)
+    {
+        return false;
+    }
+
+    DKIMInfo info;
+    return info.parseDKIM(header->asUnicodeString())
+        && Rfc8058::signatureCoversRequiredHeaders(info.listSignedHeader());
 }
 
 void UnsubscribeManager::checkResult(const Result &result)

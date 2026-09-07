@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
 
 project(kmail-unsubscribe VERSION "1.1.0")
 
+include(CTest)
+
 set(KF_MIN_VERSION "6.22.0")
 set(KPIM_MIN_VERSION "6.7.0")
 set(QT_REQUIRED_VERSION "6.6.0")
@@ -31,6 +33,8 @@ find_package(KPim6PimCommonAkonadi ${KPIM_MIN_VERSION} CONFIG REQUIRED)
 ki18n_install(po)
 
 set(kmail_unsubscribe_SRCS
+    rfc8058validator.cpp
+    rfc8058validator.h
     unsubscribemanager.cpp
     unsubscribemanager.h
     unsubscribeplugin.cpp
@@ -70,3 +74,19 @@ set_target_properties(kmail_unsubscribe PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
 )
+
+if(BUILD_TESTING)
+    find_package(Qt6 ${QT_REQUIRED_VERSION} CONFIG REQUIRED Test)
+    add_executable(rfc8058validatortest
+        autotests/rfc8058validatortest.cpp
+        rfc8058validator.cpp
+        rfc8058validator.h)
+    target_include_directories(rfc8058validatortest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(rfc8058validatortest
+        Qt6::Test
+        KPim6::MessageViewer)
+    set_target_properties(rfc8058validatortest PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON)
+    add_test(NAME rfc8058validatortest COMMAND rfc8058validatortest)
+endif()
