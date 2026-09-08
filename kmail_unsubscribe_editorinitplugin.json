@@ -1,0 +1,9 @@
+{
+    "KPlugin": {
+        "Description": "Finalizes unsubscribe email composers without applying identity templates or signatures.",
+        "EnabledByDefault": true,
+        "Name": "Unsubscribe Composer Setup",
+        "Version": "1.0"
+    },
+    "X-KDE-KMailEditor-Order": "1"
+}

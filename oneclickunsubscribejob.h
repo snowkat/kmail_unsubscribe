@@ -26,23 +26,21 @@ namespace MessageViewer
     public slots:
         void slotFinished(QNetworkReply *reply);
         void slotSslErrors(QNetworkReply *reply, const QList<QSslError> &errors);
-        void slotError(QNetworkReply::NetworkError error);
 
     signals:
         /**
          * @brief Triggered on job completion/failure.
          *
-         * @param success Whether the job was successful. If true, sslError and error should be ignored.
-         * @param sslError If unsuccessful, whether one or more SSL errors occurred.
-         * @param error If unsuccessful, the error code returned by the QNetworkRequest.
+         * @param data Success, HTTP rejection, or transport failure details.
          */
         void result(const UnsubscribeManager::Result &data);
 
     private:
+        void reportResult(const UnsubscribeManager::Result &result);
+
         QNetworkAccessManager *const mNetworkAccessManager;
         QUrl mUrl;
         bool sentResult = false;
-        QNetworkReply *mReply = nullptr;
     };
 }
 

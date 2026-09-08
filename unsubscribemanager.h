@@ -6,6 +6,10 @@
 #include <KMime/Message>
 #include <MessageCore/MailingList>
 #include <MessageViewer/DKIMManager>
+#include <QList>
+#include <QTimer>
+
+#include <memory>
 
 #define LIST_UNSUBSCRIBE_POST_HDR "List-Unsubscribe-Post"
 #define LIST_UNSUBSCRIBE_POST_VALUE "List-Unsubscribe=One-Click"
@@ -26,8 +30,11 @@ namespace MessageViewer
                 None = 0,
                 NetworkError,
                 SslError,
+                HttpError,
             } Type;
             QString ErrorString;
+            int HttpStatus = 0;
+            QString ServerHost;
         };
 
         enum Status
@@ -36,6 +43,8 @@ namespace MessageViewer
             None,
             /// @brief Unsubscribe is available, but not as one-click unsubscribe.
             NoOneClick,
+            /// @brief One-click headers are present and DKIM verification is running.
+            CheckingOneClick,
             /**
              * @brief One-Click Unsubscribe is available, but DKIM didn't verify.
              *
@@ -51,7 +60,7 @@ namespace MessageViewer
          *
          * @param item The current message item.
          */
-        void setMessageItem(const Akonadi::Item &item);
+        void setMessageItem(const Akonadi::Item &item, bool verifyOneClick = true);
 
         /**
          * @brief Tests whether the current message item has been set.
@@ -69,7 +78,7 @@ namespace MessageViewer
         /**
          * @brief Performs a One-Click unsubscribe.
          */
-        void doOneClick();
+        [[nodiscard]] bool doOneClick();
 
         /**
          * @brief Get the URL for One-Click Unsubscribe.
@@ -79,13 +88,42 @@ namespace MessageViewer
         QUrl oneClickUrl();
 
         /**
-         * @brief Get the best Unsubscribe URL.
-         * Unlike oneClickUrl, this will check for any usable Unsubscribe URL.
-         * The search order is currently HTTPS, MAILTO, and HTTP URLs.
-         *
-         * @return QUrl The best available Unsubscribe URL, per the above heuristic
+         * @brief Tests whether structurally valid RFC 8058 headers are present.
          */
-        QUrl getUrl();
+        [[nodiscard]] bool hasOneClickCandidate();
+
+        /**
+         * @brief Tests whether DKIM verification for the candidate is running.
+         */
+        [[nodiscard]] bool oneClickVerificationPending() const;
+
+        /**
+         * @brief Get every advertised email unsubscribe URL.
+         *
+         * The normal MessageCore parser is used first. A narrowly scoped raw
+         * header recovery is also included for a valid bracketed mailto URI
+         * that appears after another malformed List-Unsubscribe URI.
+         *
+         * @return The advertised mailto URLs, or an empty list when unavailable.
+         */
+        [[nodiscard]] QList<QUrl> emailUrls() const;
+
+        /**
+         * @brief Get the first advertised email unsubscribe URL.
+         *
+         * @return The first mailto URL, or an empty URL when unavailable.
+         */
+        QUrl emailUrl() const;
+
+        /**
+         * @brief Get the advertised web unsubscribe URL.
+         *
+         * HTTPS is preferred over HTTP. A cached RFC 8058 one-click URL is
+         * preferred when present.
+         *
+         * @return The preferred web URL, or an empty URL when unavailable.
+         */
+        QUrl webUrl();
 
         /**
          * @brief Resets the object's state.
@@ -108,6 +146,7 @@ namespace MessageViewer
 
     signals:
         void oneClickResult(bool isSuccess, const QString &resultString);
+        void unsubscribeStatusChanged();
 
     private:
         [[nodiscard]] bool hasValidOneClickHeaders() const;
@@ -122,8 +161,11 @@ namespace MessageViewer
         QUrl mPostUrl;
 
         // Used to check DKIM, for RFC 8058 compliance
-        DKIMManager mDkimMgr;
+        std::unique_ptr<DKIMManager> mDkimMgr;
         bool mDKIMValid = false;
+        bool mOneClickCandidate = false;
+        bool mDkimVerificationPending = false;
+        QTimer mDkimTimeout;
     };
 }
 

@@ -36,22 +36,23 @@ void OneClickUnsubscribeJob::start()
     request.setAttribute(QNetworkRequest::CookieSaveControlAttribute, QNetworkRequest::Manual);
     request.setAttribute(QNetworkRequest::AuthenticationReuseAttribute, QNetworkRequest::Manual);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+    request.setTransferTimeout(30000);
 
     qCDebug(UnsubscribePlugin) << "Sending one-click unsubscribe request to host" << mUrl.host();
 
-    mReply = mNetworkAccessManager->post(request, multiPart);
-    connect(mReply, &QNetworkReply::errorOccurred, this, &OneClickUnsubscribeJob::slotError);
+    mNetworkAccessManager->post(request, multiPart);
 }
 
-void OneClickUnsubscribeJob::slotSslErrors(QNetworkReply *reply, const QList<QSslError> &error)
+void OneClickUnsubscribeJob::slotSslErrors(QNetworkReply *, const QList<QSslError> &error)
 {
     // TODO: allow override somehow
     qCDebug(UnsubscribePlugin) << "Got" << error.count() << "SSL error(s)";
     UnsubscribeManager::Result sslErrResult = {
         .Type = UnsubscribeManager::Result::SslError,
-        .ErrorString = error.first().errorString(),
+        .ErrorString = QString(),
+        .ServerHost = mUrl.host(),
     };
-    Q_EMIT result(sslErrResult);
+    reportResult(sslErrResult);
 }
 
 void OneClickUnsubscribeJob::slotFinished(QNetworkReply *reply)
@@ -62,33 +63,44 @@ void OneClickUnsubscribeJob::slotFinished(QNetworkReply *reply)
         qCDebug(UnsubscribePlugin) << "Successful response from unsubscribe host" << mUrl.host();
         UnsubscribeManager::Result successResult = {
             .Type = UnsubscribeManager::Result::None,
+            .ErrorString = QString(),
         };
-        Q_EMIT result(successResult);
+        reportResult(successResult);
     }
-    else if (reply->error() == QNetworkReply::NoError)
+    else if (status >= 300 || (status > 0 && reply->error() == QNetworkReply::NoError))
     {
         qCWarning(UnsubscribePlugin) << "Unexpected HTTP response from unsubscribe host" << mUrl.host() << ':' << status;
         UnsubscribeManager::Result errorResult = {
-            .Type = UnsubscribeManager::Result::NetworkError,
-            .ErrorString = QString::number(status),
+            .Type = UnsubscribeManager::Result::HttpError,
+            .ErrorString = QString(),
+            .HttpStatus = status,
+            .ServerHost = mUrl.host(),
         };
-        Q_EMIT result(errorResult);
+        reportResult(errorResult);
     }
     else
     {
         // QNetworkReply error strings can contain the full URL, including its
         // opaque recipient token.
         qCWarning(UnsubscribePlugin) << "Request to unsubscribe host" << mUrl.host() << "failed with network error" << reply->error();
+        UnsubscribeManager::Result errorResult = {
+            .Type = UnsubscribeManager::Result::NetworkError,
+            .ErrorString = QString(),
+            .ServerHost = mUrl.host(),
+        };
+        reportResult(errorResult);
     }
 }
 
-void OneClickUnsubscribeJob::slotError(QNetworkReply::NetworkError error)
+void OneClickUnsubscribeJob::reportResult(const UnsubscribeManager::Result &resultData)
 {
-    UnsubscribeManager::Result errorResult = {
-        .Type = UnsubscribeManager::Result::NetworkError,
-        .ErrorString = mReply->errorString(),
-    };
-    Q_EMIT result(errorResult);
+    if (sentResult)
+    {
+        return;
+    }
+    sentResult = true;
+    Q_EMIT result(resultData);
+    deleteLater();
 }
 
 #include "moc_oneclickunsubscribejob.cpp"

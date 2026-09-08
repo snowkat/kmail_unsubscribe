@@ -1,0 +1,8 @@
+{
+    "KPlugin": {
+        "Description": "Unsubscribe from selected messages with one confirmation, using one-click, email or web.",
+        "EnabledByDefault": true,
+        "Name": "Unsubscribe Action",
+        "Version": "1.0"
+    }
+}

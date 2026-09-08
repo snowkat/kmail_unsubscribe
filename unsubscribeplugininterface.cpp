@@ -1,213 +1,123 @@
-#include "unsubscribe_debug.h"
 #include "unsubscribeplugininterface.h"
-#include <QMessageBox>
+
+#include "unsubscribeicons.h"
+
 #include <KActionCollection>
 #include <KLocalizedString>
-#include <MessageCore/MailingList>
-#include <PimCommon/NetworkManager>
-#include <KIO/OpenUrlJob>
-#include <KIO/JobUiDelegate>
-#include <KIO/JobUiDelegateFactory>
+#include <QAction>
+#include <QBoxLayout>
+#include <QToolButton>
 
 using namespace MessageViewer;
 
-// General yes/no confirm dialog
-static bool
-confirmDialog(const QString &text, const QString &question, bool safe)
+UnsubscribePluginInterface::UnsubscribePluginInterface(QWidget *parent, KActionCollection *actionCollection)
+    : ViewerPluginInterface(parent)
+    , mAvailability(this)
+    , mBatch(this)
 {
-    QMessageBox msgBox;
-    msgBox.setText(text);
-    msgBox.setInformativeText(question);
-    msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
-    msgBox.setIcon(safe ? QMessageBox::Question : QMessageBox::Warning);
-    msgBox.setDefaultButton(safe ? QMessageBox::Yes : QMessageBox::No);
+    mBatch.setParentWidget(parent);
+    connect(&mAvailability, &KMailUnsubscribe::UnsubscribeAvailability::changed, this, &UnsubscribePluginInterface::updateActions);
+    connect(&mBatch, &KMailUnsubscribe::UnsubscribeBatch::busyChanged, this, &UnsubscribePluginInterface::updateActions);
 
-    return msgBox.exec() == QMessageBox::Yes;
-}
-
-static void
-openUnsubscribeUrl(const QUrl &url, QWidget *parent)
-{
-    if (!url.isEmpty())
+    mAction = new QAction(KMailUnsubscribe::unsubscribeIcon(), i18n("Unsubscribe…"), this);
+    mAction->setIconText(i18n("Unsubscribe"));
+    mAction->setIconVisibleInMenu(true);
+    mAction->setEnabled(false);
+    if (actionCollection)
     {
-        auto job = new KIO::OpenUrlJob(url);
-        job->setUiDelegate(KIO::createDefaultJobUiDelegate(KJobUiDelegate::AutoHandlingEnabled, parent));
-        job->start();
+        QString name = QStringLiteral("oneclick_unsubscribe");
+        if (actionCollection->action(name))
+        {
+            name += QLatin1Char('_') + QString::number(reinterpret_cast<quintptr>(this), 16);
+        }
+        actionCollection->addAction(name, mAction);
+    }
+    connect(mAction, &QAction::triggered, this, &UnsubscribePluginInterface::slotActivatePlugin);
+
+    // ViewerPluginToolManager passes the reader box, whose vertical layout
+    // contains the HTML view. A native control sits directly above From/To,
+    // independent of the selected HTML header theme or message content.
+    auto *readerLayout = parent ? qobject_cast<QVBoxLayout *>(parent->layout()) : nullptr;
+    if (readerLayout)
+    {
+        mHeaderBar = new QWidget(parent);
+        mHeaderBar->setObjectName(QStringLiteral("unsubscribeHeaderBar"));
+        mHeaderBar->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+        auto *layout = new QHBoxLayout(mHeaderBar);
+        layout->setContentsMargins(4, 2, 4, 2);
+        layout->addStretch();
+        auto *button = new QToolButton(mHeaderBar);
+        button->setObjectName(QStringLiteral("unsubscribeHeaderButton"));
+        button->setAutoRaise(true);
+        button->setDefaultAction(mAction);
+        button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        layout->addWidget(button);
+        readerLayout->insertWidget(0, mHeaderBar);
+        mHeaderBar->hide();
     }
 }
 
-UnsubscribePluginInterface::UnsubscribePluginInterface(QWidget *parent, KActionCollection *ac)
-    : ViewerPluginInterface(parent),
-      mParent(parent)
+UnsubscribePluginInterface::~UnsubscribePluginInterface()
 {
-    if (ac)
-    {
-        // Create the action...
-        auto action = new QAction(this);
-        action->setIcon(QIcon::fromTheme(QStringLiteral("news-unsubscribe")));
-        action->setIconText(i18n("Unsubscribe"));
-        action->setWhatsThis(i18n("Allows you to unsubscribe from a mailing list, if the sender supports One-Click Unsubscribe"));
-
-        // ... and add it to the application's collection
-        ac->addAction(QStringLiteral("oneclick_unsubscribe"), action);
-
-        connect(action, &QAction::triggered, this, &UnsubscribePluginInterface::slotActivatePlugin);
-        // also add it to our list, for actions()
-        mActions.append(action);
-    }
-
-    connect(&mUnsub, &UnsubscribeManager::oneClickResult, this, &UnsubscribePluginInterface::getOneClickResult);
+    delete mHeaderBar.data();
 }
-
-UnsubscribePluginInterface::~UnsubscribePluginInterface() = default;
 
 QList<QAction *> UnsubscribePluginInterface::actions() const
 {
-    return mActions;
+    return {mAction};
 }
 
 void UnsubscribePluginInterface::closePlugin()
 {
-    // Reset the UnsubscribeManager's state.
-    // XXX: Currently, this doesn't cancel any running One-Click Unsubscribe
-    //      calls!
-    mUnsub.reset();
+    mItem = Akonadi::Item();
+    mCollection = Akonadi::Collection();
+    updateActions();
 }
 
-/// @brief Called when the action is clicked or otherwise activated
 void UnsubscribePluginInterface::execute()
 {
-    qCDebug(UnsubscribePlugin) << "-click!-";
-    // short-circuit if we're offline
-    if (!PimCommon::NetworkManager::self()->isOnline())
+    Akonadi::Item item = mItem;
+    if (!item.parentCollection().isValid())
     {
-        QMessageBox::critical(mParent,
-                              i18n("Network not available"),
-                              i18n("Please go back online to unsubscribe from this list."));
-        return;
+        item.setParentCollection(mCollection);
     }
-
-    if (mUnsub.hasMessage())
-    {
-        switch (mUnsub.unsubscribeStatus())
-        {
-        case UnsubscribeManager::None:
-        {
-            // Should not happen
-            QMessageBox::warning(mParent,
-                                 i18n("Can't Unsubscribe"),
-                                 i18n("This email doesn't advertise a way to unsubscribe."));
-            break;
-        }
-        break;
-        case UnsubscribeManager::NoOneClick:
-        {
-            // Load the unsubscribe URL normally
-            openUnsubscribeUrl(mUnsub.getUrl(), mParent);
-            break;
-        }
-        break;
-        case UnsubscribeManager::InvalidOneClick:
-        {
-            if (confirmDialog(
-                    i18n("The digital signature of this email couldn't be validated."),
-                    i18n("Do you still want to unsubscribe?"),
-                    false))
-            {
-                // Do not send a POST for unauthenticated headers. Open the
-                // advertised URL so the user can review it in the normal URL
-                // handler instead.
-                openUnsubscribeUrl(mUnsub.getUrl(), mParent);
-            }
-            break;
-        }
-        case UnsubscribeManager::ValidOneClick:
-        {
-            if (confirmDialog(
-                    i18n("This mailing list supports One-Click Unsubscribe."),
-                    i18n("Do you want to unsubscribe?"),
-                    true))
-            {
-                mUnsub.doOneClick();
-            }
-            break;
-        }
-        }
-    }
+    mBatch.start({item});
 }
 
 void UnsubscribePluginInterface::setMessageItem(const Akonadi::Item &item)
 {
-    mUnsub.setMessageItem(item);
+    mItem = item;
+    mAvailability.requestItems({item});
+    updateActions();
 }
 
-/// @brief Triggered when the selected item changes.
-/// @param item The new item.
+void UnsubscribePluginInterface::setCurrentCollection(const Akonadi::Collection &collection)
+{
+    mCollection = collection;
+}
+
 void UnsubscribePluginInterface::updateAction(const Akonadi::Item &item)
 {
-    mUnsub.setMessageItem(item);
-    auto status = mUnsub.unsubscribeStatus();
-    QAction *action = (mActions.isEmpty()) ? nullptr : mActions.first();
-    QString caption;
-
-    switch (mUnsub.unsubscribeStatus())
-    {
-    case UnsubscribeManager::NoOneClick:
-    {
-        QString scheme = mUnsub.getUrl().scheme();
-        if (scheme.startsWith("http"))
-        {
-            caption = i18nc("unsubscribe via the web", "Web");
-        }
-        else if (scheme.startsWith("mailto"))
-        {
-            caption = i18nc("unsubscribe via email", "Email");
-        }
-        else
-        {
-            // Unknown, just set to
-            caption = scheme;
-        }
-    }
-    break;
-    case UnsubscribeManager::InvalidOneClick:
-    case UnsubscribeManager::ValidOneClick:
-        caption = i18nc("using RFC 8058 unsubscribe", "One-Click");
-        break;
-    case UnsubscribeManager::None:
-    default:
-        // Do nothing
-        break;
-    }
-
-    // Assuming we have an action, set the action up
-    if (action)
-    {
-        action->setDisabled(status == UnsubscribeManager::None);
-        if (caption.isEmpty())
-        {
-            action->setIconText(i18n("Unsubscribe"));
-        }
-        else
-        {
-            action->setIconText(i18nc("unsubscribe via %1", "Unsubscribe (%1)", caption));
-        }
-    }
+    setMessageItem(item);
 }
 
-void UnsubscribePluginInterface::getOneClickResult(bool isSuccess, const QString &resultString)
+void UnsubscribePluginInterface::updateActions()
 {
-    if (isSuccess)
+    const auto state = mAvailability.state(mItem.id());
+    const bool oneClick = state.web == KMailUnsubscribe::UnsubscribeWorkflow::WebCapability::OneClick;
+    mAction->setEnabled(mItem.isValid() && state.available() && !mBatch.busy());
+    if (mAction->property("oneClick").toBool() != oneClick)
     {
-        QMessageBox::information(mParent,
-                                 i18n("Request Complete"),
-                                 i18n("The unsubscribe request was successfully sent."));
+        mAction->setProperty("oneClick", oneClick);
+        mAction->setIcon(KMailUnsubscribe::unsubscribeIcon(oneClick));
     }
-    else
+    mAction->setToolTip(!state.loaded ? i18n("Checking unsubscribe methods…")
+                       : !state.available() ? i18n("No unsubscribe method is available for this message")
+                       : oneClick ? i18n("Unsubscribe from this message; verified one-click is available")
+                                  : i18n("Unsubscribe from this message"));
+    if (mHeaderBar)
     {
-        QMessageBox::critical(mParent,
-                              i18n("Unsubscribe Error"),
-                              resultString);
+        mHeaderBar->setVisible(mItem.isValid());
     }
 }
 

@@ -1,39 +1,36 @@
-#ifndef _UNSUBSCRIBEPLUGININTERFACE_H_
-#define _UNSUBSCRIBEPLUGININTERFACE_H_
+#pragma once
+
+#include "unsubscribeavailability.h"
+#include "unsubscribebatch.h"
 
 #include <MessageViewer/ViewerPluginInterface>
-#include "unsubscribemanager.h"
+#include <QPointer>
 
 namespace MessageViewer
 {
-    class UnsubscribePluginInterface : public MessageViewer::ViewerPluginInterface
-    {
-        Q_OBJECT
-    public:
-        explicit UnsubscribePluginInterface(QWidget *parent, KActionCollection *ac = nullptr);
-        ~UnsubscribePluginInterface() override;
+class UnsubscribePluginInterface : public ViewerPluginInterface
+{
+    Q_OBJECT
+public:
+    explicit UnsubscribePluginInterface(QWidget *parent, KActionCollection *ac = nullptr);
+    ~UnsubscribePluginInterface() override;
 
-        [[nodiscard]] QList<QAction *> actions() const override;
-        void closePlugin() override;
-        void execute() override;
-        void setMessageItem(const Akonadi::Item &item) override;
-        void updateAction(const Akonadi::Item &item) override;
-        [[nodiscard]] ViewerPluginInterface::SpecificFeatureTypes featureTypes() const override
-        {
-            return ViewerPluginInterface::NeedMessage;
-        }
+    [[nodiscard]] QList<QAction *> actions() const override;
+    void closePlugin() override;
+    void execute() override;
+    void setMessageItem(const Akonadi::Item &item) override;
+    void setCurrentCollection(const Akonadi::Collection &collection) override;
+    void updateAction(const Akonadi::Item &item) override;
+    [[nodiscard]] SpecificFeatureTypes featureTypes() const override { return NeedMessage; }
 
-    public slots:
-        void getOneClickResult(bool isSuccess, const QString &resultString);
+private:
+    void updateActions();
 
-    private:
-        UnsubscribeManager mUnsub;
-        // Whether we're in the middle of a one-click unsubscribe operation
-        bool mUnsubscribing = true;
-
-        QList<QAction *> mActions;
-        QWidget *mParent;
-    };
+    KMailUnsubscribe::UnsubscribeAvailability mAvailability;
+    KMailUnsubscribe::UnsubscribeBatch mBatch;
+    Akonadi::Item mItem;
+    Akonadi::Collection mCollection;
+    QAction *mAction = nullptr;
+    QPointer<QWidget> mHeaderBar;
+};
 }
-
-#endif
