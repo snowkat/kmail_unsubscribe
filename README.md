@@ -1,9 +1,28 @@
-# One-Click Unsubscribe for KMail
+# Unsubscribe for KMail
 
-Adds a single Unsubscribe action to KMail and Kontact, combining authenticated
+Adds one Unsubscribe button to KMail and Kontact. It works with one message or
+many selected messages at once, combining authenticated
 [RFC 8058](https://www.rfc-editor.org/rfc/rfc8058.html) one-click requests,
-browser links, and unsubscribe emails. Single messages and selections share
-one confirmation and the same fallback order.
+browser links, and unsubscribe emails. One confirmation shows what will happen
+for every message and can move successfully unsubscribed messages to Trash.
+
+![KMail unsubscribe confirmation showing the method sequence and delete-after-success option](docs/images/unsubscribe-confirmation.png)
+
+## Install on Fedora 44
+
+Clone the repository and run the setup script:
+
+```bash
+git clone https://github.com/snowkat/kmail_unsubscribe.git
+cd kmail_unsubscribe
+./setup.sh
+```
+
+The script installs the Fedora build dependencies, builds the three KMail
+plugins, runs the tests, and installs them under `/usr/lib64/qt6/plugins`.
+It uses `sudo` for package installation and the final system install, so it may
+ask for your Linux login password. Fully quit and reopen Kontact and KMail when
+the script finishes.
 
 ## Requirements
 
@@ -28,19 +47,22 @@ Additionally, the following KDE PIM libraries are required:
 - Messagelib
 - KPimTextEdit
 
-## Building
+## Build manually
 
-This plugin is built using CMake.
+If the dependencies are already installed, build and install directly with
+CMake:
 
-```
-$ cmake -Bbuild .
-$ cmake --build build
-$ cmake --install build
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_TESTING=ON
+cmake --build build
+ctest --test-dir build --output-on-failure
+sudo cmake --install build
 ```
 
 ## Usage
 
-**Unsubscribe** is a single action in the toolbar and message context menus. It also appears above the From/To header in the message preview and separate message window. In the **Smart with Clickable Status** message-list theme, each message has one unsubscribe icon beside the existing controls in its Status column. Other themes retain the toolbar, menu, and preview actions.
+**Unsubscribe** is a single action in the toolbar and message context menus. Select several messages to unsubscribe from several mailing lists with one confirmation. The action also appears above the From/To header in the message preview and separate message window. In the **Smart with Clickable Status** message-list theme, each message has one unsubscribe icon beside the existing controls in its Status column. Other themes retain the toolbar, menu, and preview actions.
 
 In the message-list context menu, Unsubscribe is a direct entry with an icon. It replaces KMail's native email/web unsubscribe entries. The mailing-list submenu remains only when it contains other commands, such as Help or Archive.
 
